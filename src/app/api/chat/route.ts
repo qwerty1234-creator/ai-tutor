@@ -1,11 +1,10 @@
-import{GoogleGenAI}from"@google/genai";
 import{NextResponse}from"next/server";
-const ai=new GoogleGenAI({apiKey:process.env.GEMINI_API_KEY});
 export async function POST(req:Request){
-try{const{messages,grade,publisher,subject,textbook,textbookPdf}=await req.json();
-const contents=messages.map((m:any,idx:number)=>{const parts:any[]=[];if(idx===0&&textbookPdf){const[,data]=textbookPdf.split(",");if(data)parts.push({inlineData:{mimeType:"application/pdf",data}})}if(m.image){const[meta,data]=m.image.split(",");const mimeType=meta.match(/:(.*?);/)?.[1]||"image/jpeg";parts.push({inlineData:{mimeType,data}})}if(m.text)parts.push({text:m.text});return{role:m.role==="user"?"user":"model",parts}});
-const tbRule=(textbook&&textbook.trim())||textbookPdf?`\n\n【虛擬課本教材規則】：請「優先且嚴格」依據學生導入的虛擬課本（包含附加的PDF課本檔案或下方文字內容）中的定義、公式、專有名詞與解題步驟進行蘇格拉底式引導。\n${textbook||""}`:"";
-const sys=`你是一位台灣專業的一對一蘇格拉底式AI家教。目前學生年級為「${grade||"國中一年級"}」、科目為「${subject||"數學"}」、教科書版本為「${publisher||"翰林版"}」。請嚴格依照台灣108課綱與該版本章節進度引導（絕不使用超綱公式）。不直接給最終答案，先點出核心觀念與卡關點，並給出第一步引導問題。使用繁體中文回覆。${tbRule}`;
-const res=await ai.models.generateContent({model:"gemini-2.5-flash",contents,config:{systemInstruction:sys}});
-return NextResponse.json({reply:res.text});
-}catch(e:any){return NextResponse.json({error:e.message||"AI服務暫時無法回應"},{status:500})}}
+try{const{messages,grade,publisher,subject,textbook}=await req.json();
+const tbRule=textbook&&textbook.trim()?`\n\n【虛擬課本內容】：\n${textbook}\n\n請嚴格依據上方虛擬課本的定義、公式與步驟進行蘇格拉底式引導。`:"";
+const sys=`你是一位台灣專業的一對一蘇格拉底式AI家教。學生年級「${grade||"國中一年級"}」、科目「${subject||"數學"}」、版本「${publisher||"翰林版"}」。嚴格依台灣108課綱與該版本進度引導，不直接給答案，先點出核心觀念與卡關點並給出第一步提示。使用繁體中文。${tbRule}`;
+const oaiMsgs=[{role:"system",content:sys},...messages.map((m:any)=>{const content:any[]=[];if(m.text)content.push({type:"text",text:m.text});if(m.image)content.push({type:"image_url",image_url:{url:m.image}});return{role:m.role==="user"?"user":"assistant",content}})];
+const r=await fetch("https://api.openai.com/v1/chat/completions",{method:"POST",headers:{"Content-Type":"application/json",Authorization:`Bearer ${process.env.OPENAI_API_KEY}`},body:JSON.stringify({model:"gpt-4o-mini",messages:oaiMsgs})});
+const d=await r.json();if(!r.ok)throw new Error(d.error?.message||"OpenAI錯誤");
+return NextResponse.json({reply:d.choices[0].message.content});
+}catch(e:any){return NextResponse.json({error:e.message||"服務錯誤"},{status:500})}}
