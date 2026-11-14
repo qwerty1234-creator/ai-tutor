@@ -1,1 +1,182 @@
-﻿powershell -NoProfile -Command "Get-Clipboard | Set-Content -Encoding UTF8 src\app\page.tsx" && echo PAGE_OK
+﻿"use client";
+import { useState, ChangeEvent } from "react";
+
+type Msg = { role: string; text: string; image?: string };
+
+const GRADES = [
+  "國小一年級", "國小二年級", "國小三年級", "國小四年級", "國小五年級", "國小六年級",
+  "國中一年級", "國中二年級", "國中三年級",
+  "高中一年級", "高中二年級", "高中三年級"
+];
+const SUBJS = ["數學", "自然/理化", "國文", "英文", "社會", "物理", "化學", "生物", "地科"];
+const PUBS = ["翰林版", "康軒版", "南一版", "龍騰版", "全華版", "通用課綱"];
+
+export default function Home() {
+  const [m, sM] = useState<Msg[]>([
+    { role: "model", text: "你好！請選擇年級、科目與版本，點擊「📚 一鍵生成並導入整冊課本」即可建立全冊課本，並可下載 Word 檔在電腦或手機閱讀！" }
+  ]);
+  const [i, sI] = useState("");
+  const [img, sImg] = useState("");
+  const [l, sL] = useState(false);
+  const [genL, sGenL] = useState(false);
+  const [grade, sGrade] = useState("國中一年級");
+  const [subj, sSubj] = useState("數學");
+  const [pub, sPub] = useState("翰林版");
+  const [tb, sTb] = useState("");
+  const [showTb, sShowTb] = useState(true);
+
+  const f = (e: ChangeEvent<HTMLInputElement>) => {
+    const x = e.target.files?.[0];
+    if (!x) return;
+    const r = new FileReader();
+    r.onload = () => sImg(String(r.result || ""));
+    r.readAsDataURL(x);
+  };
+
+  const genFullBook = async () => {
+    if (genL) return;
+    sGenL(true);
+    try {
+      const r = await fetch("/api/generate-book", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ grade, subject: subj, publisher: pub })
+      });
+      const d = await r.json();
+      if (d.content) sTb(d.content);
+      else alert(d.error || "生成失敗");
+    } catch {
+      alert("連線錯誤");
+    }
+    sGenL(false);
+  };
+
+  const downloadWord = () => {
+    if (!tb) return;
+    const d = document.createElement("div");
+    d.innerText = tb;
+    const html = `
+      <html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word">
+      <head><meta charset="utf-8"></head>
+      <body style="font-family: 'Microsoft JhengHei', sans-serif; line-height: 1.7; padding: 20px;">
+        <h2>${grade} ${subj}（${pub}）完整課本</h2>
+        <div>${d.innerHTML}</div>
+      </body>
+      </html>`;
+    const blob = new Blob(["\ufeff", html], { type: "application/msword;charset=utf-8" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = `${grade}_${subj}_${pub}_課本.doc`;
+    a.click();
+  };
+
+  const s = async () => {
+    if ((!i.trim() && !img) || l) return;
+    const n: Msg[] = [...m, { role: "user", text: i || "請解析圖片", image: img || undefined }];
+    sM(n);
+    sI("");
+    sImg("");
+    sL(true);
+    try {
+      const r = await fetch("/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ messages: n, grade, subject: subj, publisher: pub, textbook: tb })
+      });
+      const d = await r.json();
+      sM([...n, { role: "model", text: d.reply || ("錯誤:" + d.error) }]);
+    } catch {
+      sM([...n, { role: "model", text: "連線錯誤" }]);
+    }
+    sL(false);
+  };
+
+  return (
+    <main className="min-h-screen bg-slate-50 flex flex-col items-center p-2 sm:p-4">
+      <div className="w-full max-w-2xl bg-white rounded-2xl shadow border flex flex-col h-[92vh] sm:h-[88vh]">
+        <header className="p-3 border-b flex flex-wrap gap-2 justify-between items-center">
+          <span className="font-bold text-slate-800 text-sm sm:text-base">AI 一對一蘇格拉底家教</span>
+          <div className="flex flex-wrap gap-1.5 items-center">
+            <select value={grade} onChange={e => sGrade(e.target.value)} className="border rounded-lg px-2 py-1 text-xs text-slate-700 bg-slate-50">
+              {GRADES.map(g => <option key={g} value={g}>{g}</option>)}
+            </select>
+            <select value={subj} onChange={e => sSubj(e.target.value)} className="border rounded-lg px-2 py-1 text-xs text-slate-700 bg-slate-50">
+              {SUBJS.map(s => <option key={s} value={s}>{s}</option>)}
+            </select>
+            <select value={pub} onChange={e => sPub(e.target.value)} className="border rounded-lg px-2 py-1 text-xs text-slate-700 bg-slate-50">
+              {PUBS.map(p => <option key={p} value={p}>{p}</option>)}
+            </select>
+            <button onClick={() => sShowTb(!showTb)} className={"px-2.5 py-1 rounded-lg text-xs font-medium border " + (tb ? "bg-amber-50 border-amber-400 text-amber-800" : "bg-slate-100 text-slate-700")}>
+              📖 虛擬課本{tb ? "(已載入)" : ""}
+            </button>
+          </div>
+        </header>
+
+        {showTb && (
+          <div className="p-3 bg-amber-50/70 border-b space-y-2">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <button onClick={genFullBook} disabled={genL} className="px-3 py-1.5 bg-amber-600 text-white rounded-lg text-xs font-medium">
+                {genL ? "⏳ 正在編寫整冊課本..." : "📚 一鍵生成並導入整冊課本"}
+              </button>
+              <div className="flex gap-2 items-center">
+                {tb && (
+                  <button onClick={downloadWord} className="px-2.5 py-1.5 bg-blue-700 text-white rounded-lg text-xs font-medium">
+                    ⬇️ 下載 Word 檔 (.doc)
+                  </button>
+                )}
+                {tb && (
+                  <button onClick={() => sTb("")} className="text-xs text-red-600 underline">
+                    清除
+                  </button>
+                )}
+              </div>
+            </div>
+            <textarea
+              value={tb}
+              onChange={e => sTb(e.target.value)}
+              rows={4}
+              placeholder="生成後可點「⬇️ 下載 Word 檔 (.doc)」存到電腦或手機..."
+              className="w-full border rounded-xl p-2 text-xs text-slate-800 bg-white"
+            />
+          </div>
+        )}
+
+        <div className="flex-1 overflow-y-auto p-3 sm:p-4 space-y-3">
+          {m.map((x, k) => (
+            <div key={k} className={"flex " + (x.role === "user" ? "justify-end" : "justify-start")}>
+              <div className={"max-w-[85%] rounded-2xl p-3 text-sm whitespace-pre-wrap " + (x.role === "user" ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-800")}>
+                {x.image && <img src={x.image} alt="題目" className="max-h-48 rounded mb-2" />}
+                {x.text}
+              </div>
+            </div>
+          ))}
+          {l && <div className="text-xs text-slate-400">思考中...</div>}
+        </div>
+
+        {img && (
+          <div className="px-4 pt-2 flex gap-2 items-center">
+            <img src={img} alt="預覽" className="h-12 rounded" />
+            <button onClick={() => sImg("")} className="text-xs text-red-500">移除</button>
+          </div>
+        )}
+
+        <div className="p-3 border-t flex gap-2">
+          <label className="cursor-pointer px-3 py-2 bg-slate-100 rounded-xl text-sm text-slate-700">
+            傳圖
+            <input type="file" accept="image/*" onChange={f} className="hidden" />
+          </label>
+          <input
+            value={i}
+            onChange={e => sI(e.target.value)}
+            onKeyDown={e => e.key === "Enter" && s()}
+            placeholder="輸入題目..."
+            className="flex-1 border rounded-xl px-3 py-2 text-sm text-slate-800"
+          />
+          <button onClick={s} disabled={l} className="px-4 py-2 bg-blue-600 text-white rounded-xl text-sm">
+            送出
+          </button>
+        </div>
+      </div>
+    </main>
+  );
+}
