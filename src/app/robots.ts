@@ -1,0 +1,1 @@
+export default function robots(){return{rules:{userAgent:"*",allow:"/"},sitemap:"https://ai-tutor-one-blond.vercel.app/sitemap.xml"}}

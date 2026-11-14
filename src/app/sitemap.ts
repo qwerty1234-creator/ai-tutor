@@ -1,0 +1,1 @@
+export default function sitemap(){return[{url:"https://ai-tutor-one-blond.vercel.app",lastModified:new Date()}]}
