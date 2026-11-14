@@ -95,7 +95,7 @@ export default function Home() {
     <main className="min-h-screen bg-slate-50 flex flex-col items-center p-2 sm:p-4">
       <div className="w-full max-w-2xl bg-white rounded-2xl shadow border flex flex-col h-[92vh] sm:h-[88vh]">
         <header className="p-3 border-b flex flex-wrap gap-2 justify-between items-center">
-          <span className="font-bold text-slate-800 text-sm sm:text-base">AI 一對一蘇格拉底家教</span>
+          <span className="font-bold text-slate-800 text-sm sm:text-base">ai問答</span>
           <div className="flex flex-wrap gap-1.5 items-center">
             <select value={grade} onChange={e => sGrade(e.target.value)} className="border rounded-lg px-2 py-1 text-xs text-slate-700 bg-slate-50">
               {GRADES.map(g => <option key={g} value={g}>{g}</option>)}
